@@ -54,6 +54,9 @@
           host: "{{ _host }}"
           oauth_token: "{{ inventory_request_setup_org_admin_token }}"
           verify_ssl: "{{ inventory_request_setup_aap_validate_certs }}"
+          # Injected as AAP_REQUEST_TIMEOUT. Left unset, it injects an empty
+          # string and the controller modules fail to convert it to a float.
+          request_timeout: "10"
       no_log: true
 
     - name: Create the project for this repo
