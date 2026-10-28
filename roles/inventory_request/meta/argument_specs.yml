@@ -1,0 +1,37 @@
+---
+argument_specs:
+  main:
+    short_description: Create a team-owned inventory in AAP
+    options:
+      inventory_request_organization:
+        type: str
+        default: Database Automation
+        description: Organization the inventory is created in.
+      inventory_request_name:
+        type: str
+        description: Name of the inventory (survey variable C(inventory_name)).
+      inventory_request_description:
+        type: str
+        description: Description of the inventory (survey variable C(inventory_description)).
+      inventory_request_team:
+        type: str
+        description: Team that will own the inventory (survey variable C(owning_team)).
+      inventory_request_team_role:
+        type: str
+        default: Inventory Admin
+        description: Role definition granted to the owning team.
+      inventory_request_allowed_teams:
+        type: list
+        elements: str
+        default: []
+        description: Teams that may be selected. Empty means any team in the organization.
+      inventory_request_aap_hostname:
+        type: str
+        description: AAP gateway URL.
+      inventory_request_aap_token:
+        type: str
+        no_log: true
+        description: AAP API token of the organization admin.
+      inventory_request_aap_validate_certs:
+        type: bool
+        description: Validate the AAP TLS certificate.

@@ -1,0 +1,20 @@
+---
+# Organization that owns every inventory created by this role.
+inventory_request_organization: Database Automation
+
+# Request details. In AAP these come from the workflow survey.
+inventory_request_name: "{{ inventory_name | default('') }}"
+inventory_request_description: "{{ inventory_description | default('') }}"
+inventory_request_team: "{{ owning_team | default('') }}"
+
+# Role definition granted to the owning team on the new inventory.
+inventory_request_team_role: Inventory Admin
+
+# Teams that requesters may pick. Empty means any team in the organization.
+inventory_request_allowed_teams: []
+
+# AAP connection. Inside AAP, these extra vars are injected by the
+# "Red Hat Ansible Automation Platform" credential attached to the job template.
+inventory_request_aap_hostname: "{{ aap_hostname }}"
+inventory_request_aap_token: "{{ aap_token }}"
+inventory_request_aap_validate_certs: "{{ aap_validate_certs | default(true) | bool }}"

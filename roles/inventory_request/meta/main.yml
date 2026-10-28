@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: inventory_request
+  author: bhinson
+  description: >-
+    Create an AAP inventory owned by a single team. Runs as the organization
+    admin from an approved workflow, after checking the requester is in that team.
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.16"
+  platforms:
+    - name: GenericLinux
+      versions: [all]
+dependencies: []

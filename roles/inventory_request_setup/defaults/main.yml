@@ -1,0 +1,32 @@
+---
+inventory_request_setup_organization: Database Automation
+
+# Teams offered in the survey dropdown, and given Execute on the workflow.
+# Empty means every team in the organization, looked up when this runs.
+inventory_request_setup_teams: []
+
+# Organization admin: the job runs with their API token, and they approve requests.
+inventory_request_setup_org_admin: "{{ org_admin_username }}"
+inventory_request_setup_org_admin_token: "{{ org_admin_token }}"
+
+# Source of this repo, synced into AAP as a project.
+inventory_request_setup_scm_url: https://github.com/bhinson/ansible-organization-cac.git
+inventory_request_setup_scm_branch: main
+
+inventory_request_setup_execution_environment: Default execution environment
+
+# Object names in AAP.
+inventory_request_setup_project: Inventory Request
+inventory_request_setup_credential: Inventory Request - Org Admin API Token
+inventory_request_setup_job_template: Inventory Request - Create
+inventory_request_setup_workflow: Inventory Request - Workflow
+inventory_request_setup_approval_timeout: 0   # seconds, 0 = never time out
+
+# Inventory the job template runs against. Created if it doesn't exist and
+# visible only to the org admin (it holds only the implicit localhost).
+inventory_request_setup_runner_inventory: Inventory Request - Runner
+
+# Connection used to configure AAP (system admin or org admin token).
+inventory_request_setup_aap_hostname: "{{ aap_hostname }}"
+inventory_request_setup_aap_token: "{{ aap_token }}"
+inventory_request_setup_aap_validate_certs: "{{ aap_validate_certs | default(true) | bool }}"

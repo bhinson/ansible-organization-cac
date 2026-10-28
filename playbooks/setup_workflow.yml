@@ -1,0 +1,10 @@
+---
+# Configures AAP to run the inventory request workflow (configuration as code).
+# Run locally. Secrets come from the git-ignored secrets.yml:
+#   ansible-playbook playbooks/setup_workflow.yml -e @secrets.yml
+- name: Configure the inventory request workflow in AAP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - inventory_request_setup

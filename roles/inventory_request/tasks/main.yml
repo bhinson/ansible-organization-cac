@@ -1,0 +1,138 @@
+---
+- name: Create a team-owned inventory
+  module_defaults:
+    group/ansible.controller.controller:
+      aap_hostname: "{{ inventory_request_aap_hostname }}"
+      aap_token: "{{ inventory_request_aap_token }}"
+      validate_certs: "{{ inventory_request_aap_validate_certs }}"
+  vars:
+    _gw:
+      host: "{{ inventory_request_aap_hostname }}"
+      oauth_token: "{{ inventory_request_aap_token }}"
+      verify_ssl: "{{ inventory_request_aap_validate_certs }}"
+    _ctl: "{{ _gw }}"
+  block:
+    - name: Validate the request
+      ansible.builtin.assert:
+        that:
+          - inventory_request_name | trim | length > 0
+          - inventory_request_name | length <= 512
+          - inventory_request_team | trim | length > 0
+          - >-
+            inventory_request_allowed_teams | length == 0
+            or inventory_request_team in inventory_request_allowed_teams
+        fail_msg: >-
+          An inventory name and an owning team are required, and the team must be
+          one of: {{ inventory_request_allowed_teams | join(', ') | default('any team', true) }}.
+        quiet: true
+
+    # The job runs with the org admin credential, so the requester is whoever
+    # launched the workflow, not the user the job authenticates as.
+    - name: Identify the user who launched the workflow
+      ansible.builtin.set_fact:
+        inventory_request_requester: >-
+          {{ lookup('ansible.controller.controller_api', 'workflow_jobs/' ~ awx_workflow_job_id, **_ctl)
+               .summary_fields.created_by.username
+             if awx_workflow_job_id is defined
+             else awx_user_name | default(tower_user_name) | default('') }}
+
+    - name: Fail if the requester could not be identified
+      ansible.builtin.assert:
+        that: inventory_request_requester | length > 0
+        fail_msg: Could not work out which user launched this request.
+        quiet: true
+
+    - name: Look up the owning team in the organization
+      ansible.builtin.set_fact:
+        inventory_request_team_obj: >-
+          {{ lookup('ansible.platform.gateway_api', 'teams', expect_one=true,
+                    query_params={'name': inventory_request_team,
+                                  'organization__name': inventory_request_organization},
+                    **_gw) }}
+
+    - name: Check that the requester is a member of the owning team
+      ansible.builtin.assert:
+        that:
+          - >-
+            query('ansible.platform.gateway_api',
+                  'teams/' ~ inventory_request_team_obj.id ~ '/users',
+                  query_params={'username': inventory_request_requester}, **_gw)
+            | length == 1
+        fail_msg: >-
+          User '{{ inventory_request_requester }}' is not a member of team
+          '{{ inventory_request_team }}', so they can't create an inventory for it.
+        quiet: true
+
+    - name: Look up an existing inventory with the same name
+      ansible.builtin.set_fact:
+        _existing: >-
+          {{ query('ansible.controller.controller_api', 'inventories',
+                   query_params={'name': inventory_request_name,
+                                 'organization__name': inventory_request_organization},
+                   **_ctl) }}
+
+    # Inventory names are unique per organization. Re-running a request for a
+    # team's own inventory is fine. Taking over another team's inventory is not.
+    - name: Refuse to take over an inventory owned by another team
+      ansible.builtin.assert:
+        that:
+          - >-
+            query('ansible.controller.controller_api', 'role_team_assignments',
+                  query_params={'object_id': _existing[0].id,
+                                'content_type__model': 'inventory',
+                                'role_definition__name': inventory_request_team_role,
+                                'team_ansible_id': inventory_request_team_obj.summary_fields.resource.ansible_id},
+                  **_ctl)
+            | length > 0
+        fail_msg: >-
+          An inventory named '{{ inventory_request_name }}' already exists in
+          '{{ inventory_request_organization }}' and isn't owned by team
+          '{{ inventory_request_team }}'. Choose a different name.
+        quiet: true
+      when: _existing | length > 0
+
+    # The controller's copy of the team. Its id is used for the role
+    # assignment because the module's team_ansible_id option is typed as an int.
+    - name: Look up the owning team in the controller
+      ansible.builtin.set_fact:
+        _controller_team: >-
+          {{ query('ansible.controller.controller_api', 'teams', expect_one=true,
+                   query_params={'name': inventory_request_team,
+                                 'organization__name': inventory_request_organization},
+                   **_ctl) | first }}
+
+    - name: Create the inventory and hand it to the owning team
+      block:
+        - name: Create the inventory
+          ansible.controller.inventory:
+            name: "{{ inventory_request_name }}"
+            description: "{{ inventory_request_description }}"
+            organization: "{{ inventory_request_organization }}"
+            state: present
+          register: inventory_request_inventory
+
+        - name: Give the owning team the admin role on the inventory
+          ansible.controller.role_team_assignment:
+            role_definition: "{{ inventory_request_team_role }}"
+            object_id: "{{ inventory_request_inventory.id }}"
+            team: "{{ _controller_team.id }}"
+            state: present
+      rescue:
+        # Don't leave behind an inventory that no team owns.
+        - name: Remove the inventory created by this run
+          ansible.controller.inventory:
+            name: "{{ inventory_request_name }}"
+            organization: "{{ inventory_request_organization }}"
+            state: absent
+          when: _existing | length == 0
+
+        - name: Report the failure
+          ansible.builtin.fail:
+            msg: "Inventory request failed: {{ ansible_failed_result.msg | default(ansible_failed_result) }}"
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          Inventory '{{ inventory_request_name }}' (id {{ inventory_request_inventory.id }})
+          in '{{ inventory_request_organization }}' is owned by team
+          '{{ inventory_request_team }}'. Requested by {{ inventory_request_requester }}.

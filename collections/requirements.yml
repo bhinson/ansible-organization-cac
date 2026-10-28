@@ -1,0 +1,11 @@
+---
+# Red Hat certified collections from Automation Hub on console.redhat.com.
+# Versions match AAP 2.6 (controller 4.7.x, platform 2.6.x). ansible.controller
+# needs 4.7.18 or later for API token (aap_token / oauth_token) auth.
+# AAP project syncs install these with the organization's Automation Hub
+# credential. For local runs, see README.md.
+collections:
+  - name: ansible.platform
+    version: ">=2.6.20260930,<2.7.0"
+  - name: ansible.controller
+    version: ">=4.7.18,<4.8.0"

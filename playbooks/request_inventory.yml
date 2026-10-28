@@ -1,0 +1,9 @@
+---
+# Run by the "Inventory Request - Create" job template, after the workflow's
+# approval node is approved. Runs with the org admin's AAP credential.
+- name: Create a team-owned inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - inventory_request

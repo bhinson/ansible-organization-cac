@@ -1,0 +1,179 @@
+---
+- name: Configure the inventory request workflow
+  module_defaults:
+    group/ansible.controller.controller:
+      aap_hostname: "{{ _host }}"
+      aap_token: "{{ inventory_request_setup_aap_token }}"
+      validate_certs: "{{ inventory_request_setup_aap_validate_certs }}"
+  vars:
+    _host: >-
+      {{ inventory_request_setup_aap_hostname
+         if inventory_request_setup_aap_hostname is match('https?://')
+         else 'https://' ~ inventory_request_setup_aap_hostname }}
+    _gw:
+      host: "{{ _host }}"
+      oauth_token: "{{ inventory_request_setup_aap_token }}"
+      verify_ssl: "{{ inventory_request_setup_aap_validate_certs }}"
+    _ctl: "{{ _gw }}"
+  block:
+    - name: Look up the teams in the organization
+      ansible.builtin.set_fact:
+        _org_teams: >-
+          {{ query('ansible.platform.gateway_api', 'teams',
+                   query_params={'organization__name': inventory_request_setup_organization},
+                   **_gw) | sort(attribute='name') }}
+
+    - name: Select the teams offered in the survey
+      ansible.builtin.set_fact:
+        _teams: >-
+          {{ _org_teams | selectattr('name', 'in', inventory_request_setup_teams) | list
+             if inventory_request_setup_teams | length > 0 else _org_teams }}
+
+    - name: Fail if a configured team is missing from the organization
+      ansible.builtin.assert:
+        that: inventory_request_setup_teams | difference(_teams | map(attribute='name')) | length == 0
+        fail_msg: >-
+          Teams not found in '{{ inventory_request_setup_organization }}':
+          {{ inventory_request_setup_teams | difference(_teams | map(attribute='name')) | join(', ') }}
+        quiet: true
+
+    - name: Check that the org admin user exists
+      ansible.builtin.set_fact:
+        _org_admin: >-
+          {{ lookup('ansible.platform.gateway_api', 'users', expect_one=true,
+                    query_params={'username': inventory_request_setup_org_admin}, **_gw) }}
+
+    - name: Store the org admin API token in an AAP credential
+      ansible.controller.credential:
+        name: "{{ inventory_request_setup_credential }}"
+        description: >-
+          API token of {{ inventory_request_setup_org_admin }}. Inventory requests run as this user.
+        organization: "{{ inventory_request_setup_organization }}"
+        credential_type: Red Hat Ansible Automation Platform
+        inputs:
+          host: "{{ _host }}"
+          oauth_token: "{{ inventory_request_setup_org_admin_token }}"
+          verify_ssl: "{{ inventory_request_setup_aap_validate_certs }}"
+      no_log: true
+
+    - name: Create the project for this repo
+      ansible.controller.project:
+        name: "{{ inventory_request_setup_project }}"
+        description: Configuration as code for team-owned inventory requests
+        organization: "{{ inventory_request_setup_organization }}"
+        scm_type: git
+        scm_url: "{{ inventory_request_setup_scm_url }}"
+        scm_branch: "{{ inventory_request_setup_scm_branch }}"
+        scm_update_on_launch: true
+        default_environment: "{{ inventory_request_setup_execution_environment }}"
+        wait: true
+        update_project: true
+
+    - name: Create the inventory the job template runs against
+      ansible.controller.inventory:
+        name: "{{ inventory_request_setup_runner_inventory }}"
+        description: Runs the inventory request job (localhost only)
+        organization: "{{ inventory_request_setup_organization }}"
+
+    - name: Create the job template that creates the inventory
+      ansible.controller.job_template:
+        name: "{{ inventory_request_setup_job_template }}"
+        description: Creates a team-owned inventory. Only runs from the approved workflow.
+        organization: "{{ inventory_request_setup_organization }}"
+        project: "{{ inventory_request_setup_project }}"
+        playbook: playbooks/request_inventory.yml
+        inventory: "{{ inventory_request_setup_runner_inventory }}"
+        execution_environment: "{{ inventory_request_setup_execution_environment }}"
+        credentials:
+          - "{{ inventory_request_setup_credential }}"
+        ask_variables_on_launch: false
+
+    - name: Create the workflow with its survey
+      ansible.controller.workflow_job_template:
+        name: "{{ inventory_request_setup_workflow }}"
+        description: Request a new inventory owned by one of your teams. Needs org admin approval.
+        organization: "{{ inventory_request_setup_organization }}"
+        ask_variables_on_launch: false
+        allow_simultaneous: true
+        survey_enabled: true
+        survey_spec:
+          name: Inventory request
+          description: Details of the inventory to create
+          spec:
+            - question_name: Inventory name
+              question_description: Must be unique within the organization
+              variable: inventory_name
+              type: text
+              required: true
+              min: 1
+              max: 512
+            - question_name: Description
+              variable: inventory_description
+              type: text
+              required: false
+              min: 0
+              max: 512
+              default: ""
+            - question_name: Owning team
+              question_description: >-
+                Team that will own and manage the inventory. You must be a member of this team.
+              variable: owning_team
+              type: multiplechoice
+              required: true
+              choices: "{{ _teams | map(attribute='name') | list }}"
+      register: _workflow
+
+    - name: Add the job template node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "{{ inventory_request_setup_workflow }}"
+        organization: "{{ inventory_request_setup_organization }}"
+        identifier: Create Inventory in AAP
+        unified_job_template: "{{ inventory_request_setup_job_template }}"
+
+    # Created and linked in separate calls: linking in the same call as
+    # approval_node posts to the approval template instead of the node.
+    - name: Add the approval node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "{{ inventory_request_setup_workflow }}"
+        organization: "{{ inventory_request_setup_organization }}"
+        identifier: Administrator Approval
+        approval_node:
+          name: Administrator Approval
+          description: >-
+            {{ inventory_request_setup_org_admin }} approves new inventories
+            for {{ inventory_request_setup_organization }}
+          timeout: "{{ inventory_request_setup_approval_timeout }}"
+
+    - name: Run the job template when the request is approved
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "{{ inventory_request_setup_workflow }}"
+        organization: "{{ inventory_request_setup_organization }}"
+        identifier: Administrator Approval
+        success_nodes:
+          - Create Inventory in AAP
+
+    # Role assignments use controller ids: the modules' *_ansible_id options
+    # are typed as int, but ansible_ids are UUIDs.
+    - name: Look up the teams' controller ids
+      ansible.builtin.set_fact:
+        _controller_teams: >-
+          {{ query('ansible.controller.controller_api', 'teams',
+                   query_params={'organization__name': inventory_request_setup_organization},
+                   return_all=true, **_ctl)
+             | selectattr('name', 'in', _teams | map(attribute='name'))
+             | list }}
+
+    - name: Let each team launch the workflow
+      ansible.controller.role_team_assignment:
+        role_definition: WorkflowJobTemplate Execute
+        object_id: "{{ _workflow.id }}"
+        team: "{{ item.id }}"
+      loop: "{{ _controller_teams }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Let the org admin approve requests
+      ansible.controller.role_user_assignment:
+        role_definition: WorkflowJobTemplate Approve
+        object_id: "{{ _workflow.id }}"
+        user: "{{ inventory_request_setup_org_admin }}"

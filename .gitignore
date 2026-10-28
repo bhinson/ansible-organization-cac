@@ -1,0 +1,5 @@
+secrets.yml
+*.secret*
+ansible.cfg.local
+collections/ansible_collections/
+*.retry
