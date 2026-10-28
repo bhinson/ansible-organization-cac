@@ -5,9 +5,12 @@ description: Set up, change, verify, or troubleshoot the team-owned inventory re
 
 # Team-owned inventory request workflow
 
-This repo configures AAP (as code) so that team members request an inventory, the
-organization admin approves it, and a job running **as the org admin** creates the
-inventory and grants **only the selected team** Inventory Admin on it.
+This repo configures AAP (as code) so that team members request an inventory and a job
+running **as the org admin** creates it and grants **only the selected team** Inventory
+Admin on it. There are two workflows with the same survey: *Approval Required* (the org
+admin approves first) and *No Approval Required* (the job runs straight away). Every team
+can launch both, so approval can be bypassed. That's deliberate for this example; a real
+deployment normally keeps only one.
 
 ## Layout
 
@@ -48,7 +51,7 @@ Run everything from the repo root.
    deletes a newly created inventory, so a failure never leaves an unowned inventory.
 5. The workflow and job template keep `ask_variables_on_launch: false`, so survey input
    can't override the credential's injected `aap_*` variables.
-6. Teams get only *WorkflowJobTemplate Execute*. They get nothing on the job template,
+6. Teams get only *WorkflowJobTemplate Execute* on the workflows. They get nothing on the job template,
    the project, or the org admin credential.
 7. Token-based auth only. `ansible.controller` must be **>= 4.7.18**, because earlier
    builds ignore `aap_token`.
@@ -57,7 +60,7 @@ Run everything from the repo root.
 
 You need API tokens for one user in team A and one in team B, plus the org admin's token.
 
-1. User A launches the workflow for team A. The run waits at the approval node.
+1. User A launches the Approval Required workflow for team A. The run waits at the approval node.
 2. Users A and B can't approve it (HTTP 403). The org admin approves.
 3. The inventory exists, team A holds *Inventory Admin*, and the job output names user A
    as the requester.
@@ -65,7 +68,9 @@ You need API tokens for one user in team A and one in team B, plus the org admin
 5. User B launches the workflow for team A, and it's approved. The job fails with
    "not a member", and nothing is created.
 6. As users A and B, fetch the job detail, events, and stdout. All return 403.
-7. Delete the test inventories afterwards.
+7. Repeat steps 3–5 with the No Approval Required workflow. There's no approval step,
+   but the membership check still blocks user B.
+8. Delete the test inventories afterwards.
 
 Every user who can launch the workflow can see its run history and survey answers. This
 is an accepted trade-off of using a single shared workflow.

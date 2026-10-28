@@ -12,7 +12,7 @@ system admins) can see the inventory. Other teams can't.
 ```
  Team member                      Org admin                     Job (runs as org admin)
  ───────────                      ─────────                     ──────────────────────
- Launch "Inventory Request - Workflow"
+ Launch "Inventory Request - Workflow (Approval Required)"
    survey: name, description,
            owning team (dropdown)
               │
@@ -59,6 +59,21 @@ The roles work around two issues in the certified `ansible.controller` modules:
 * `workflow_job_template_node` can't create an `approval_node` and set its
   `success_nodes` in the same call, so the setup does it in two calls.
 
+## Two workflows: an example, not a recommendation
+
+This repo creates two workflows with the same survey, both launchable by every team:
+
+* **Inventory Request - Workflow (Approval Required)**: the org admin approves each request
+  before the inventory is created.
+* **Inventory Request - Workflow (No Approval Required)**: the inventory is created
+  straight away.
+
+> **Note:** Because every team can launch both, anyone can bypass the approval by using the
+> No Approval Required workflow. Both are included only to demonstrate the two patterns.
+> A real deployment usually picks one, depending on whether approval is needed. Either
+> remove the workflow you don't want, or limit who has *WorkflowJobTemplate Execute* on it.
+> The team membership check applies in both workflows.
+
 ## Security model
 
 * **No secrets in git.** AAP API tokens and the Automation Hub token live in a local,
@@ -66,7 +81,7 @@ The roles work around two issues in the certified `ansible.controller` modules:
   where AAP keeps it encrypted.
 * **Token auth only.** No passwords are used anywhere.
 * **Least privilege for teams.** Each team gets only *WorkflowJobTemplate Execute* on the
-  workflow. Teams get no access to the job template, the project or the org admin credential.
+  workflows. Teams get no access to the job template, the project or the org admin credential.
 * **Requests are checked server-side.** The survey offers every team, but the job
   confirms through the gateway API that the user who launched the workflow belongs to
   the team they picked. Otherwise the request fails and nothing is created.
@@ -136,9 +151,10 @@ All objects belong to the **Database Automation** organization.
 | Project (this repo) | Inventory Request | Org admin only |
 | Inventory (localhost only, runs the job) | Inventory Request - Runner | Org admin only |
 | Job template | Inventory Request - Create | Org admin only |
-| Workflow job template + survey | Inventory Request - Workflow | Every team: Execute. Org admin: Approve |
-| Workflow node (approval) | Administrator Approval | Org admin approves or denies |
-| Workflow node (runs the job template) | Create Inventory in AAP | Runs after approval |
+| Workflow job template + survey | Inventory Request - Workflow (Approval Required) | Every team: Execute. Org admin: Approve |
+| Workflow job template + survey | Inventory Request - Workflow (No Approval Required) | Every team: Execute |
+| Workflow node (approval) | Administrator Approval | Org admin approves or denies (Approval Required workflow only) |
+| Workflow node (runs the job template) | Create Inventory in AAP | Runs after approval, or straight away in the No Approval Required workflow |
 
 The setup doesn't store an Automation Hub token. `ah_token` in `secrets.yml` is only for
 local `ansible-galaxy` installs.
@@ -148,7 +164,7 @@ update `secrets.yml` and run the setup again.
 
 ## Using it
 
-1. A team member opens **Templates → Inventory Request - Workflow → Launch**, fills in the
+1. A team member opens **Templates → Inventory Request - Workflow (Approval Required) → Launch**, fills in the
    inventory name and description, and picks the owning team.
 2. The org admin approves the request under **Workflow approvals**.
 3. The inventory appears for every member of the selected team, who can manage it

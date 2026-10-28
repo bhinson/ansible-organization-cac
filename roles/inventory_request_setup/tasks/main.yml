@@ -78,7 +78,7 @@
     - name: Create the job template that creates the inventory
       ansible.controller.job_template:
         name: "{{ inventory_request_setup_job_template }}"
-        description: Creates a team-owned inventory. Only runs from the approved workflow.
+        description: Creates a team-owned inventory. Launched by the inventory request workflows.
         organization: "{{ inventory_request_setup_organization }}"
         project: "{{ inventory_request_setup_project }}"
         playbook: playbooks/request_inventory.yml
@@ -88,10 +88,10 @@
           - "{{ inventory_request_setup_credential }}"
         ask_variables_on_launch: false
 
-    - name: Create the workflow with its survey
+    - name: Create the workflows with their survey
       ansible.controller.workflow_job_template:
-        name: "{{ inventory_request_setup_workflow }}"
-        description: Request a new inventory owned by one of your teams. Needs org admin approval.
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
         organization: "{{ inventory_request_setup_organization }}"
         ask_variables_on_launch: false
         allow_simultaneous: true
@@ -121,14 +121,24 @@
               type: multiplechoice
               required: true
               choices: "{{ _teams | map(attribute='name') | list }}"
-      register: _workflow
+      loop:
+        - name: "{{ inventory_request_setup_workflow }}"
+          description: Request a new inventory owned by one of your teams. Needs org admin approval.
+        - name: "{{ inventory_request_setup_workflow_no_approval }}"
+          description: Create a new inventory owned by one of your teams, without approval.
+      loop_control:
+        label: "{{ item.name }}"
+      register: _workflows
 
-    - name: Add the job template node
+    - name: Add the job template node to both workflows
       ansible.controller.workflow_job_template_node:
-        workflow_job_template: "{{ inventory_request_setup_workflow }}"
+        workflow_job_template: "{{ item }}"
         organization: "{{ inventory_request_setup_organization }}"
         identifier: Create Inventory in AAP
         unified_job_template: "{{ inventory_request_setup_job_template }}"
+      loop:
+        - "{{ inventory_request_setup_workflow }}"
+        - "{{ inventory_request_setup_workflow_no_approval }}"
 
     # Created and linked in separate calls: linking in the same call as
     # approval_node posts to the approval template instead of the node.
@@ -163,17 +173,17 @@
              | selectattr('name', 'in', _teams | map(attribute='name'))
              | list }}
 
-    - name: Let each team launch the workflow
+    - name: Let each team launch both workflows
       ansible.controller.role_team_assignment:
         role_definition: WorkflowJobTemplate Execute
-        object_id: "{{ _workflow.id }}"
-        team: "{{ item.id }}"
-      loop: "{{ _controller_teams }}"
+        object_id: "{{ item.0.id }}"
+        team: "{{ item.1.id }}"
+      loop: "{{ _workflows.results | product(_controller_teams) | list }}"
       loop_control:
-        label: "{{ item.name }}"
+        label: "{{ item.0.item.name }}: {{ item.1.name }}"
 
     - name: Let the org admin approve requests
       ansible.controller.role_user_assignment:
         role_definition: WorkflowJobTemplate Approve
-        object_id: "{{ _workflow.id }}"
+        object_id: "{{ _workflows.results[0].id }}"
         user: "{{ inventory_request_setup_org_admin }}"

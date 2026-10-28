@@ -1,7 +1,7 @@
 ---
 inventory_request_setup_organization: Database Automation
 
-# Teams offered in the survey dropdown, and given Execute on the workflow.
+# Teams offered in the survey dropdown, and given Execute on both workflows.
 # Empty means every team in the organization, looked up when this runs.
 inventory_request_setup_teams: []
 
@@ -19,7 +19,8 @@ inventory_request_setup_execution_environment: Default execution environment
 inventory_request_setup_project: Inventory Request
 inventory_request_setup_credential: Inventory Request - Org Admin API Token
 inventory_request_setup_job_template: Inventory Request - Create
-inventory_request_setup_workflow: Inventory Request - Workflow
+inventory_request_setup_workflow: Inventory Request - Workflow (Approval Required)
+inventory_request_setup_workflow_no_approval: Inventory Request - Workflow (No Approval Required)
 inventory_request_setup_approval_timeout: 0   # seconds, 0 = never time out
 
 # Inventory the job template runs against. Created if it doesn't exist and
