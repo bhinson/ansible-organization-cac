@@ -1,6 +1,6 @@
 # ansible-organization-cac
 
-Team-owned inventory requests for Ansible Automation Platform (AAP) 2.6, built
+Team-owned inventory requests for Ansible Automation Platform (AAP) 2.7, built
 with configuration as code. AAP configures itself from this repo.
 
 Users in different teams of the same organization (here, **Database Automation**)
@@ -43,13 +43,14 @@ system admins) can see the inventory. Other teams can't.
 
 Both collections are Red Hat certified content from Automation Hub on console.redhat.com.
 
-* `ansible.platform` (2.6.x): looks up teams and team membership in the platform gateway.
-* `ansible.controller` (4.7.18 or later): manages inventories, credentials, projects,
+* `ansible.platform` (2.7.x): looks up teams and team membership in the platform gateway.
+* `ansible.controller` (4.8.12 or later): manages inventories, credentials, projects,
   job templates, workflows and role assignments on the controller. `ansible.platform`
   has no modules for these objects.
 
-`ansible.controller` must be **4.7.18 or later**. Earlier certified builds, such as
-4.8.0, accept `aap_token` but authenticate only with a username and password.
+`ansible.controller` must be **4.8.12 or later** on AAP 2.7 (4.7.18 or later on 2.6).
+Earlier certified builds, such as 4.8.0, accept `aap_token` but authenticate only with a
+username and password.
 
 The roles work around two issues in the certified `ansible.controller` modules:
 
@@ -98,7 +99,7 @@ This repo creates two workflows with the same survey, both launchable by every t
 
 ## Prerequisites
 
-* AAP 2.6 with the organization, teams and users already created, and one organization
+* AAP 2.7 with the organization, teams and users already created, and one organization
   admin user.
 * The organization's Galaxy credentials must be able to install the certified collections
   in `collections/requirements.yml` during project sync.
